@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  price-monitor:
+    build: .
+    container_name: price-monitor
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./config:/app/config:ro
+      - ./certs:/app/certs:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./static:/app/static:ro
+    environment:
+      - PYTHONPATH=/app
+      - FLASK_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('https://localhost:8443/health', verify=False)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Price Monitor Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-chart-line"></i> Price Monitor Dashboard</h1>
+                <div class="header-stats">
+                    <div class="stat-card">
+                        <span class="stat-label">Total Products</span>
+                        <span class="stat-value" id="total-products">-</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Active Products</span>
+                        <span class="stat-value" id="active-products">-</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-label">Recent Drops</span>
+                        <span class="stat-value" id="recent-drops">-</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Add Product Section -->
+            <section class="add-product-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-plus-circle"></i> Add New Product</h2>
+                </div>
+                <div class="add-product-form">
+                    <div class="form-group">
+                        <label for="product-url">Product URL:</label>
+                        <input type="url" id="product-url" placeholder="https://example.com/product" required>
+                    </div>
+                    <button id="add-product-btn" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Product
+                    </button>
+                </div>
+            </section>
+
+            <!-- Products List Section -->
+            <section class="products-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-list"></i> Monitored Products</h2>
+                    <div class="section-controls">
+                        <button id="refresh-btn" class="btn btn-secondary">
+                            <i class="fas fa-sync-alt"></i> Refresh
+                        </button>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="show-inactive" />
+                            <span class="slider"></span>
+                            <span class="toggle-label">Show Inactive</span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div id="products-container" class="products-container">
+                    <div class="loading" id="loading">
+                        <i class="fas fa-spinner fa-spin"></i> Loading products...
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Product Detail Modal -->
+        <div id="product-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="modal-product-name">Product Details</h3>
+                    <span class="close" id="modal-close">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="product-detail-info">
+                        <div class="product-image">
+                            <img id="modal-product-image" src="" alt="Product Image" />
+                        </div>
+                        <div class="product-info">
+                            <div class="info-row">
+                                <label>URL:</label>
+                                <a id="modal-product-url" href="" target="_blank">View Product</a>
+                            </div>
+                            <div class="info-row">
+                                <label>Current Price:</label>
+                                <span id="modal-current-price" class="price">$0.00</span>
+                            </div>
+                            <div class="info-row">
+                                <label>Previous Price:</label>
+                                <span id="modal-previous-price" class="price">$0.00</span>
+                            </div>
+                            <div class="info-row">
+                                <label>Lowest Price:</label>
+                                <span id="modal-lowest-price" class="price lowest">$0.00</span>
+                            </div>
+                            <div class="info-row">
+                                <label>Last Checked:</label>
+                                <span id="modal-last-checked">-</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Manual Price Update -->
+                    <div class="manual-update-section">
+                        <h4>Manual Price Update</h4>
+                        <div class="form-group">
+                            <label for="manual-price">New Price:</label>
+                            <input type="number" id="manual-price" step="0.01" min="0" placeholder="0.00">
+                            <button id="update-price-btn" class="btn btn-primary">
+                                <i class="fas fa-edit"></i> Update Price
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Price History -->
+                    <div class="price-history-section">
+                        <h4>Recent Price History</h4>
+                        <div id="price-history-container" class="price-history">
+                            <div class="loading">
+                                <i class="fas fa-spinner fa-spin"></i> Loading history...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button id="delete-product-btn" class="btn btn-danger">
+                        <i class="fas fa-trash"></i> Delete Product
+                    </button>
+                    <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notification Toast -->
+        <div id="toast" class="toast">
+            <div class="toast-content">
+                <span id="toast-message"></span>
+                <button id="toast-close" class="toast-close">&times;</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
