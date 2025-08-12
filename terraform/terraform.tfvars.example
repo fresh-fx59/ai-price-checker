@@ -1,0 +1,51 @@
+# Example Terraform variables file for Price Monitor
+# Copy this file to terraform.tfvars and customize the values
+
+# Basic Configuration
+aws_region   = "us-west-2"
+environment  = "dev"
+project_name = "price-monitor"
+
+# Network Configuration
+vpc_cidr            = "10.0.0.0/16"
+public_subnet_cidr  = "10.0.1.0/24"
+private_subnet_cidr = "10.0.2.0/24"
+
+# Restrict SSH access to your IP (replace with your actual IP)
+admin_cidr_blocks = ["YOUR_IP_ADDRESS/32"]
+
+# EC2 Configuration
+instance_type = "t3.medium"  # Adjust based on your needs
+app_port      = 8080
+
+# Auto Scaling Configuration
+asg_min_size         = 1
+asg_max_size         = 3
+asg_desired_capacity = 2
+
+# Database Configuration
+use_rds                     = true
+db_instance_class          = "db.t3.micro"
+db_allocated_storage       = 20
+db_max_allocated_storage   = 100
+db_name                    = "price_monitor"
+db_username                = "price_monitor_user"
+db_password                = "your_secure_database_password_here"
+db_backup_retention_period = 7
+
+# Email Configuration (required for notifications)
+smtp_server     = "smtp.gmail.com"
+smtp_port       = 587
+smtp_username   = "your_email@gmail.com"
+smtp_password   = "your_app_password_here"
+recipient_email = "alerts@yourdomain.com"
+
+# SSL/TLS Configuration
+enable_mtls = false
+domain_name = ""  # Leave empty for no custom domain, or set to "yourdomain.com"
+
+# Monitoring and Logging
+log_retention_days = 14
+
+# Security
+enable_deletion_protection = false  # Set to true for production
