@@ -13,14 +13,28 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 
-from .services.config_service import ConfigService
-from .services.product_service import ProductService
-from .services.parser_service import ParserService
-from .services.web_scraping_service import WebScrapingService
-from .services.price_monitor_service import PriceMonitorService
-from .services.email_service import EmailService
-from .models.database import DatabaseManager
-from .app import SecureFlaskApp
+try:
+    # Try relative imports first (when run as module)
+    from .services.config_service import ConfigService
+    from .services.product_service import ProductService
+    from .services.parser_service import ParserService
+    from .services.web_scraping_service import WebScrapingService
+    from .services.price_monitor_service import PriceMonitorService
+    from .services.email_service import EmailService
+    from .services.logging_service import LoggingService
+    from .models.database import DatabaseManager
+    from .app import SecureFlaskApp
+except ImportError:
+    # Fall back to absolute imports (when run directly)
+    from services.config_service import ConfigService
+    from services.product_service import ProductService
+    from services.parser_service import ParserService
+    from services.web_scraping_service import WebScrapingService
+    from services.price_monitor_service import PriceMonitorService
+    from services.email_service import EmailService
+    from services.logging_service import LoggingService
+    from models.database import DatabaseManager
+    from app import SecureFlaskApp
 
 
 class PriceMonitorApplication:
@@ -37,6 +51,7 @@ class PriceMonitorApplication:
         self.logger = None
         self.config_service = None
         self.config = None
+        self.logging_service = None
         self.db_manager = None
         self.product_service = None
         self.web_scraping_service = None
@@ -101,13 +116,17 @@ class PriceMonitorApplication:
             True if initialization successful, False otherwise
         """
         try:
-            # Initialize logging first
-            self._setup_logging()
+            # Initialize basic logging first
+            self._setup_basic_logging()
             
             self.logger.info("Starting Price Monitor application initialization...")
             
             # Load configuration
             if not self._load_configuration():
+                return False
+            
+            # Initialize comprehensive logging service
+            if not self._initialize_logging_service():
                 return False
             
             # Initialize database
@@ -137,13 +156,13 @@ class PriceMonitorApplication:
                 print(f"Failed to initialize application: {str(e)}")
             return False
     
-    def _setup_logging(self):
-        """Setup application logging."""
+    def _setup_basic_logging(self):
+        """Setup basic logging before configuration is loaded."""
         # Create logs directory if it doesn't exist
         log_dir = Path("logs")
         log_dir.mkdir(exist_ok=True)
         
-        # Configure logging
+        # Configure basic logging
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -154,7 +173,25 @@ class PriceMonitorApplication:
         )
         
         self.logger = logging.getLogger(__name__)
-        self.logger.info("Logging initialized")
+        self.logger.info("Basic logging initialized")
+    
+    def _initialize_logging_service(self) -> bool:
+        """Initialize comprehensive logging service."""
+        try:
+            self.logger.info("Initializing comprehensive logging service...")
+            
+            # Initialize logging service with configuration
+            self.logging_service = LoggingService(self.config)
+            
+            # Update logger to use the new service
+            self.logger = logging.getLogger(__name__)
+            self.logger.info("Comprehensive logging service initialized")
+            
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to initialize logging service: {str(e)}")
+            return False
     
     def _load_configuration(self) -> bool:
         """Load application configuration."""
@@ -222,10 +259,16 @@ class PriceMonitorApplication:
                 os.makedirs(db_dir, exist_ok=True)
             
             # Initialize database manager
-            self.db_manager = DatabaseManager(self.config.database_path)
+            # Convert file path to SQLAlchemy URL if needed
+            database_url = self.config.database_path
+            if not database_url.startswith(('sqlite://', 'postgresql://', 'mysql://')):
+                # Assume it's a file path for SQLite
+                database_url = f"sqlite:///{database_url}"
+            
+            self.db_manager = DatabaseManager(database_url)
             
             # Initialize database schema
-            self.db_manager.initialize_database()
+            self.db_manager.init_database()
             
             self.logger.info(f"Database initialized: {self.config.database_path}")
             return True
@@ -280,6 +323,7 @@ class PriceMonitorApplication:
                 parser_service=self.parser_service,
                 web_scraping_service=self.web_scraping_service,
                 email_service=self.email_service,
+                logging_service=self.logging_service,
                 max_concurrent_checks=5,
                 check_timeout=self.config.request_timeout_seconds,
                 max_retries=self.config.max_retry_attempts
@@ -299,7 +343,7 @@ class PriceMonitorApplication:
             self.logger.info("Initializing Flask application...")
             
             # Create Flask app with all services
-            self.flask_app = SecureFlaskApp(self.config_service)
+            self.flask_app = SecureFlaskApp(self.config_service, self.logging_service)
             
             self.logger.info("Flask application initialized")
             return True
@@ -313,21 +357,59 @@ class PriceMonitorApplication:
         try:
             self.logger.info("Starting price monitoring scheduler...")
             
-            # Calculate check time based on frequency
-            check_time = "09:00"  # Default to 9 AM
+            # Get scheduling configuration
+            check_frequency_hours = getattr(self.config, 'check_frequency_hours', 24)
+            check_time = getattr(self.config, 'check_time', "09:00")
             
-            # Start the scheduler
-            self.price_monitor_service.start_scheduler(check_time)
+            # Validate check frequency
+            if check_frequency_hours <= 0:
+                self.logger.error(f"Invalid check frequency: {check_frequency_hours} hours")
+                return False
+            
+            # Start the scheduler with configurable frequency and time
+            if check_frequency_hours == 24:
+                # Daily checks at specified time
+                self.price_monitor_service.start_scheduler(check_time)
+                self.logger.info(f"Price monitoring scheduler started (daily at {check_time})")
+            else:
+                # Hourly checks based on frequency
+                self.price_monitor_service.start_scheduler_with_frequency(check_frequency_hours)
+                self.logger.info(f"Price monitoring scheduler started (every {check_frequency_hours} hours)")
             
             # Register shutdown handler for scheduler
             self._shutdown_handlers.append(self.price_monitor_service.stop_scheduler)
             
-            self.logger.info(f"Price monitoring scheduler started (daily at {check_time})")
+            # Schedule daily cleanup of old logging data
+            if self.logging_service:
+                self._schedule_logging_cleanup()
+            
             return True
             
         except Exception as e:
             self.logger.error(f"Failed to start monitoring scheduler: {str(e)}")
             return False
+    
+    def _schedule_logging_cleanup(self):
+        """Schedule periodic cleanup of old logging data."""
+        try:
+            import schedule
+            
+            # Schedule daily cleanup at 2 AM
+            schedule.every().day.at("02:00").do(self._cleanup_logging_data)
+            
+            self.logger.info("Scheduled daily logging data cleanup at 02:00")
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to schedule logging cleanup: {str(e)}")
+    
+    def _cleanup_logging_data(self):
+        """Clean up old logging data."""
+        try:
+            if self.logging_service:
+                self.logging_service.cleanup_old_data()
+                self.logger.info("Completed scheduled logging data cleanup")
+        except Exception as e:
+            self.logger.error(f"Error during logging data cleanup: {str(e)}")
     
     def run(self, host: str = '0.0.0.0', port: Optional[int] = None, debug: bool = False):
         """

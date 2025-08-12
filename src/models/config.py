@@ -22,6 +22,7 @@ class Config:
     
     # Monitoring settings
     check_frequency_hours: int = 24
+    check_time: str = "09:00"  # Time for daily checks in HH:MM format
     max_retry_attempts: int = 3
     request_timeout_seconds: int = 30
     
@@ -42,6 +43,14 @@ class Config:
     log_level: str = "INFO"
     log_file_path: str = "logs/price_monitor.log"
     
+    # Logging and monitoring settings
+    enable_structured_logging: bool = True
+    enable_performance_monitoring: bool = True
+    enable_error_tracking: bool = True
+    log_retention_days: int = 30
+    metrics_retention_hours: int = 24
+    error_retention_hours: int = 168  # 7 days
+    
     def __post_init__(self):
         """Validate configuration after initialization."""
         self._validate_types()
@@ -53,6 +62,16 @@ class Config:
         
         if not isinstance(self.check_frequency_hours, int) or self.check_frequency_hours <= 0:
             raise ValueError("check_frequency_hours must be a positive integer")
+        
+        # Validate check_time format
+        if not isinstance(self.check_time, str):
+            raise ValueError("check_time must be a string")
+        
+        try:
+            import time
+            time.strptime(self.check_time, "%H:%M")
+        except ValueError:
+            raise ValueError("check_time must be in HH:MM format (24-hour)")
         
         if not isinstance(self.max_retry_attempts, int) or self.max_retry_attempts < 0:
             raise ValueError("max_retry_attempts must be a non-negative integer")

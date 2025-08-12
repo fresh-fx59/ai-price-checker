@@ -21,16 +21,23 @@ from .models.database import DatabaseManager
 class SecureFlaskApp:
     """Flask application with mTLS authentication."""
     
-    def __init__(self, config_service: ConfigService):
+    def __init__(self, config_service: ConfigService, logging_service: Optional['LoggingService'] = None):
         """Initialize the secure Flask application."""
         self.app = Flask(__name__, static_folder='../static', static_url_path='/static')
         self.config_service = config_service
         self.config = config_service.get_config()
         self.security_service = SecurityService(self.config)
+        self.logging_service = logging_service
         self.logger = logging.getLogger(__name__)
         
         # Initialize database and services
-        self.db_manager = DatabaseManager(self.config.database_path)
+        # Convert file path to SQLAlchemy URL if needed
+        database_url = self.config.database_path
+        if not database_url.startswith(('sqlite://', 'postgresql://', 'mysql://')):
+            # Assume it's a file path for SQLite
+            database_url = f"sqlite:///{database_url}"
+        
+        self.db_manager = DatabaseManager(database_url)
         self.product_service = ProductService(self.db_manager)
         self.web_scraping_service = WebScrapingService(
             timeout=self.config.request_timeout_seconds,
@@ -46,7 +53,8 @@ class SecureFlaskApp:
             self.product_service,
             self.parser_service,
             self.web_scraping_service,
-            self.email_service
+            self.email_service,
+            self.logging_service
         )
         
         # Load certificates
@@ -70,13 +78,60 @@ class SecureFlaskApp:
         
         @self.app.route('/health', methods=['GET'])
         def health_check():
-            """Health check endpoint."""
-            return jsonify({
+            """Enhanced health check endpoint with logging system status."""
+            health_status = {
                 'status': 'healthy',
                 'service': 'price-monitor',
                 'mtls_enabled': self.config.enable_mtls,
-                'client_id': getattr(g, 'client_id', 'anonymous')
-            })
+                'client_id': getattr(g, 'client_id', 'anonymous'),
+                'timestamp': datetime.now().isoformat()
+            }
+            
+            # Add logging service health if available
+            if self.logging_service:
+                logging_health = self.logging_service.get_health_status()
+                health_status['logging'] = logging_health
+            
+            return jsonify(health_status)
+        
+        @self.app.route('/api/monitoring/metrics', methods=['GET'])
+        @require_authentication
+        def get_performance_metrics():
+            """Get performance metrics."""
+            if not self.logging_service:
+                return jsonify({'error': 'Logging service not available'}), 503
+            
+            try:
+                operation = request.args.get('operation')
+                metrics = self.logging_service.get_performance_stats(operation)
+                
+                return jsonify({
+                    'metrics': metrics,
+                    'timestamp': datetime.now().isoformat()
+                })
+            except Exception as e:
+                self.logger.error(f"Error retrieving performance metrics: {str(e)}")
+                return jsonify({'error': 'Failed to retrieve metrics'}), 500
+        
+        @self.app.route('/api/monitoring/errors', methods=['GET'])
+        @require_authentication
+        def get_error_summary():
+            """Get error summary."""
+            if not self.logging_service:
+                return jsonify({'error': 'Logging service not available'}), 503
+            
+            try:
+                since_hours = int(request.args.get('since_hours', 24))
+                error_summary = self.logging_service.get_error_summary(since_hours)
+                
+                return jsonify({
+                    'error_summary': error_summary,
+                    'since_hours': since_hours,
+                    'timestamp': datetime.now().isoformat()
+                })
+            except Exception as e:
+                self.logger.error(f"Error retrieving error summary: {str(e)}")
+                return jsonify({'error': 'Failed to retrieve error summary'}), 500
         
         @self.app.route('/api/products', methods=['GET'])
         @require_authentication

@@ -125,6 +125,7 @@ class PriceMonitorService:
                  parser_service: ParserService,
                  web_scraping_service: WebScrapingService,
                  email_service: Optional[EmailService] = None,
+                 logging_service: Optional['LoggingService'] = None,
                  max_concurrent_checks: int = 5,
                  check_timeout: int = 60,
                  max_retries: int = 3,
@@ -138,6 +139,7 @@ class PriceMonitorService:
             parser_service: Service for parsing product information
             web_scraping_service: Service for web scraping
             email_service: Service for sending email notifications (optional)
+            logging_service: Service for comprehensive logging and monitoring (optional)
             max_concurrent_checks: Maximum number of concurrent price checks
             check_timeout: Timeout for individual price checks in seconds
             max_retries: Maximum number of retry attempts for failed checks
@@ -148,6 +150,7 @@ class PriceMonitorService:
         self.parser_service = parser_service
         self.web_scraping_service = web_scraping_service
         self.email_service = email_service
+        self.logging_service = logging_service
         self.max_concurrent_checks = max_concurrent_checks
         self.check_timeout = check_timeout
         self.max_retries = max_retries
@@ -201,6 +204,18 @@ class PriceMonitorService:
         
         self.logger.info(f"Checking price for product: {product.name} ({product.url})")
         
+        # Use performance monitoring if available
+        if self.logging_service:
+            with self.logging_service.measure_performance(
+                "price_check", 
+                {"product_id": product_id, "product_name": product.name, "url": product.url}
+            ):
+                return self._check_product_with_retries(product)
+        else:
+            return self._check_product_with_retries(product)
+    
+    def _check_product_with_retries(self, product: Product) -> PriceCheckResult:
+        """Internal method to check product with retries."""
         # Attempt the check with retries
         for attempt in range(self.max_retries + 1):
             try:
@@ -208,11 +223,11 @@ class PriceMonitorService:
                 
                 if result.success:
                     # Reset failure counters on success
-                    self._reset_failure_tracking(product_id, product.url)
+                    self._reset_failure_tracking(product.id, product.url)
                     return result
                 else:
                     # Record the failure
-                    self._record_failure(product_id, product.url, result.error_message, attempt)
+                    self._record_failure(product.id, product.url, result.error_message, attempt)
                     
                     # If this is not the last attempt, wait before retrying
                     if attempt < self.max_retries:
@@ -221,26 +236,35 @@ class PriceMonitorService:
                         time.sleep(delay)
                     else:
                         # All attempts failed
-                        self._handle_persistent_failure(product_id, product.url)
+                        self._handle_persistent_failure(product.id, product.url)
                         return result
                         
             except Exception as e:
                 error_msg = f"Unexpected error during price check: {str(e)}"
                 self.logger.error(f"Unexpected error checking {product.url} (attempt {attempt + 1}): {error_msg}")
                 
-                self._record_error(product_id, product.url, ErrorType.UNKNOWN_ERROR, error_msg, attempt)
+                # Track error with logging service if available
+                if self.logging_service:
+                    self.logging_service.track_error(e, {
+                        "product_id": product.id,
+                        "product_name": product.name,
+                        "url": product.url,
+                        "attempt": attempt + 1
+                    })
+                
+                self._record_error(product.id, product.url, ErrorType.UNKNOWN_ERROR, error_msg, attempt)
                 
                 if attempt < self.max_retries:
                     delay = self._calculate_retry_delay(attempt)
                     time.sleep(delay)
                 else:
                     return PriceCheckResult.error_result(
-                        product_id, product.name, product.url, error_msg
+                        product.id, product.name, product.url, error_msg
                     )
         
         # This should never be reached, but just in case
         return PriceCheckResult.error_result(
-            product_id, product.name, product.url, "All retry attempts exhausted"
+            product.id, product.name, product.url, "All retry attempts exhausted"
         )
     
     def _attempt_price_check(self, product: Product, attempt_number: int) -> PriceCheckResult:
@@ -485,6 +509,44 @@ class PriceMonitorService:
         self._scheduler_thread.start()
         
         self.logger.info("Price monitoring scheduler started")
+    
+    def start_scheduler_with_frequency(self, frequency_hours: int) -> None:
+        """
+        Start the scheduler with a custom frequency in hours.
+        
+        Args:
+            frequency_hours: How often to run checks in hours
+        """
+        if self._scheduler_running:
+            self.logger.warning("Scheduler is already running")
+            return
+        
+        if frequency_hours <= 0:
+            raise ValueError("Frequency must be a positive number of hours")
+        
+        # Clear existing schedule
+        schedule.clear()
+        
+        # Schedule checks based on frequency
+        if frequency_hours >= 24:
+            # For 24+ hours, schedule daily
+            schedule.every().day.do(self._scheduled_check_wrapper)
+        elif frequency_hours >= 1:
+            # For 1+ hours, schedule hourly
+            schedule.every(frequency_hours).hours.do(self._scheduled_check_wrapper)
+        else:
+            # For sub-hourly, convert to minutes
+            frequency_minutes = int(frequency_hours * 60)
+            schedule.every(frequency_minutes).minutes.do(self._scheduled_check_wrapper)
+        
+        self._stop_scheduler.clear()
+        self._scheduler_running = True
+        
+        # Start scheduler thread
+        self._scheduler_thread = threading.Thread(target=self._run_scheduler, daemon=True)
+        self._scheduler_thread.start()
+        
+        self.logger.info(f"Price monitoring scheduler started (every {frequency_hours} hours)")
     
     def stop_scheduler(self) -> None:
         """Stop the scheduler."""

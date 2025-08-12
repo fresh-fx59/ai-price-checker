@@ -1,0 +1,111 @@
+PRICE MONITOR - COMPREHENSIVE INTEGRATION TEST REPORT
+============================================================
+
+Test Run Date: 2025-08-11T23:56:37.255436
+Duration: 1488.68 seconds
+Output Directory: test_validation_report
+
+ENVIRONMENT INFORMATION:
+------------------------------
+Python Version: 3.12.0 (v3.12.0:0fb18b02c8, Oct  2 2023, 09:45:56) [Clang 13.0.0 (clang-1300.0.29.30)]
+Operating System: Darwin 23.6.0
+Architecture: arm64
+Docker Available: True
+Docker Version: Docker version 24.0.7, build afdd53b
+Docker Compose Available: True
+Selenium Available: False
+All Required Files Present: True
+
+TEST SUMMARY:
+---------------
+Total Tests: 93
+Passed: 62
+Failed: 15
+Errors: 16
+Skipped: 0
+Success Rate: 66.7%
+
+OVERALL RESULT: FAIL
+
+MODULE RESULTS:
+----------------
+
+tests.test_comprehensive_validation:
+  Tests Run: 13
+  Failures: 5
+  Errors: 2
+  Skipped: 0
+  Success: ✗
+
+tests.test_end_to_end_integration:
+  Tests Run: 20
+  Failures: 1
+  Errors: 13
+  Skipped: 0
+  Success: ✗
+
+tests.test_mtls_integration:
+  Tests Run: 5
+  Failures: 0
+  Errors: 0
+  Skipped: 0
+  Success: ✓
+
+tests.test_price_monitor_email_integration:
+  Import Error: cannot import name 'ParsingResult' from 'src.models.web_scraping' (/Users/a/Documents/projects/ai-price-checker/ai-price-checker/tests/../src/models/web_scraping.py)
+
+tests.test_product_management_integration:
+  Tests Run: 6
+  Failures: 5
+  Errors: 1
+  Skipped: 0
+  Success: ✗
+
+tests.test_api_integration:
+  Tests Run: 6
+  Failures: 4
+  Errors: 0
+  Skipped: 0
+  Success: ✗
+
+tests.test_main_application:
+  Tests Run: 0
+  Failures: 0
+  Errors: 0
+  Skipped: 0
+  Success: ✓
+
+tests.test_config_integration:
+  Tests Run: 4
+  Failures: 0
+  Errors: 0
+  Skipped: 0
+  Success: ✓
+
+tests.test_logging_integration:
+  Tests Run: 4
+  Failures: 0
+  Errors: 0
+  Skipped: 0
+  Success: ✓
+
+tests.test_parsing_integration:
+  Tests Run: 9
+  Failures: 0
+  Errors: 0
+  Skipped: 0
+  Success: ✓
+
+tests.test_price_monitor_error_handling:
+  Tests Run: 18
+  Failures: 0
+  Errors: 0
+  Skipped: 0
+  Success: ✓
+
+tests.test_product_listing_features:
+  Tests Run: 8
+  Failures: 0
+  Errors: 0
+  Skipped: 0
+  Success: ✓

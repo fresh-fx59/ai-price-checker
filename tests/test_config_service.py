@@ -65,6 +65,19 @@ class TestConfig(unittest.TestCase):
             Config(check_frequency_hours=0)
         self.assertIn("check_frequency_hours must be a positive integer", str(cm.exception))
         
+        # Test invalid check_time
+        with self.assertRaises(ValueError) as cm:
+            Config(check_time="25:00")
+        self.assertIn("check_time must be in HH:MM format", str(cm.exception))
+        
+        with self.assertRaises(ValueError) as cm:
+            Config(check_time="10:70")
+        self.assertIn("check_time must be in HH:MM format", str(cm.exception))
+        
+        with self.assertRaises(ValueError) as cm:
+            Config(check_time="invalid")
+        self.assertIn("check_time must be in HH:MM format", str(cm.exception))
+        
         # Test invalid max_retry_attempts
         with self.assertRaises(ValueError) as cm:
             Config(max_retry_attempts=-1)
@@ -93,6 +106,7 @@ class TestConfig(unittest.TestCase):
         """Test that Config accepts valid values."""
         config = Config(
             smtp_port=25,
+            check_time="14:30",
             check_frequency_hours=1,
             max_retry_attempts=0,
             request_timeout_seconds=60,

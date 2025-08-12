@@ -120,6 +120,8 @@ class ConfigService:
             # Monitoring settings
             "monitoring.check_frequency_hours": ("check_frequency_hours", int),
             "check_frequency_hours": ("check_frequency_hours", int),
+            "monitoring.check_time": ("check_time", str),
+            "check_time": ("check_time", str),
             "monitoring.max_retry_attempts": ("max_retry_attempts", int),
             "max_retry_attempts": ("max_retry_attempts", int),
             "monitoring.request_timeout_seconds": ("request_timeout_seconds", int),
@@ -321,6 +323,7 @@ recipient = recipient@example.com
 
 [monitoring]
 check_frequency_hours = 24
+check_time = 09:00
 max_retry_attempts = 3
 request_timeout_seconds = 30
 

@@ -1,0 +1,63 @@
+# Docker Compose Configuration for Production
+# Use this file for production deployment: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+version: '3.8'
+
+services:
+  price-monitor:
+    # Use specific image tag for production
+    image: price-monitor:latest
+    
+    # Production-specific environment variables
+    environment:
+      # Use production configuration
+      - CONFIG_PATH=/app/config/default.properties
+      - FLASK_ENV=production
+      - LOG_LEVEL=INFO
+      - ENABLE_MTLS=true
+      - API_PORT_OVERRIDE=8443
+    
+    # Enhanced resource limits for production
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+    
+    # Production logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+        compress: "true"
+    
+    # Enhanced security for production
+    security_opt:
+      - no-new-privileges:true
+      - apparmor:docker-default
+    
+    # Read-only root filesystem with minimal writable areas
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m
+      - /var/tmp:noexec,nosuid,size=50m
+    
+    # Production health check with longer intervals
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-k", "https://localhost:8443/health"]
+      interval: 60s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+    
+    # Restart policy
+    restart: unless-stopped

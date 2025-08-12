@@ -25,6 +25,17 @@ class SecurityService:
         
     def load_certificates(self) -> CertificateBundle:
         """Load certificates from configured paths."""
+        # Skip certificate loading if mTLS is disabled
+        if not getattr(self.config, 'enable_mtls', False):
+            self.logger.info("mTLS disabled, skipping certificate loading")
+            self._certificate_bundle = CertificateBundle(
+                server_cert="",
+                server_key="",
+                ca_cert="",
+                client_certs=[]
+            )
+            return self._certificate_bundle
+        
         try:
             # Load server certificate
             server_cert = self._load_certificate_file(self.config.server_cert_path)

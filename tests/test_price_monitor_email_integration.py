@@ -13,7 +13,8 @@ from src.services.parser_service import ParserService
 from src.services.web_scraping_service import WebScrapingService
 from src.models.config import Config
 from src.models.database import Product, DatabaseManager
-from src.models.web_scraping import ProductInfo, ScrapingResult, ParsingResult
+from src.models.web_scraping import ProductInfo, ScrapingResult
+from src.parsers.product_parser import ParsingResult
 
 
 class TestPriceMonitorEmailIntegration:

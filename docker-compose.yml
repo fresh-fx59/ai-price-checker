@@ -5,20 +5,84 @@ services:
     build: .
     container_name: price-monitor
     ports:
-      - "8443:8443"
+      - "${API_PORT:-8443}:8443"
     volumes:
+      # Configuration files (read-only)
       - ./config:/app/config:ro
+      # SSL/TLS certificates (read-only)
       - ./certs:/app/certs:ro
+      # Persistent data storage
       - ./data:/app/data
+      # Log files
       - ./logs:/app/logs
+      # Static web files (read-only)
       - ./static:/app/static:ro
     environment:
+      # Python configuration
       - PYTHONPATH=/app
-      - FLASK_ENV=production
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      
+      # Flask configuration
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - FLASK_APP=src.main
+      
+      # Application configuration overrides (optional)
+      - CONFIG_PATH=${CONFIG_PATH:-/app/config/default.properties}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CHECK_FREQUENCY_HOURS=${CHECK_FREQUENCY_HOURS:-24}
+      - CHECK_TIME=${CHECK_TIME:-09:00}
+      - ENABLE_MTLS=${ENABLE_MTLS:-true}
+      - API_PORT_OVERRIDE=${API_PORT:-8443}
+      
+      # Email configuration (optional overrides)
+      - SMTP_SERVER=${SMTP_SERVER:-}
+      - SMTP_PORT=${SMTP_PORT:-}
+      - SMTP_USERNAME=${SMTP_USERNAME:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - RECIPIENT_EMAIL=${RECIPIENT_EMAIL:-}
+      
+      # Security configuration
+      - REQUEST_TIMEOUT_SECONDS=${REQUEST_TIMEOUT_SECONDS:-30}
+      - MAX_RETRY_ATTEMPTS=${MAX_RETRY_ATTEMPTS:-3}
+      
+      # AI/Parsing configuration (optional)
+      - AI_API_KEY=${AI_API_KEY:-}
+      - AI_API_ENDPOINT=${AI_API_ENDPOINT:-}
+      - ENABLE_AI_PARSING=${ENABLE_AI_PARSING:-false}
+    
     restart: unless-stopped
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+        reservations:
+          memory: 256M
+          cpus: '0.25'
+    
+    # Health check using curl (matches Dockerfile)
     healthcheck:
-      test: ["CMD", "python", "-c", "import requests; requests.get('https://localhost:8443/health', verify=False)"]
+      test: ["CMD", "curl", "-f", "-k", "https://localhost:8443/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 30s
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Security options
+    security_opt:
+      - no-new-privileges:true
+    
+    # Read-only root filesystem (with exceptions for writable directories)
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,size=100m

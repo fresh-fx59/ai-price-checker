@@ -1,0 +1,34 @@
+# Docker Compose Override for Development
+# This file is automatically loaded by docker-compose and overrides settings
+# from docker-compose.yml for development purposes
+
+version: '3.8'
+
+services:
+  price-monitor:
+    # Override port mapping for development (HTTP instead of HTTPS)
+    ports:
+      - "8080:8080"
+    
+    # Override environment variables for development
+    environment:
+      # Use development configuration
+      - CONFIG_PATH=/app/config/development.properties
+      - FLASK_ENV=development
+      - LOG_LEVEL=DEBUG
+      - ENABLE_MTLS=false
+      - API_PORT_OVERRIDE=8080
+    
+    # Remove read-only filesystem for development
+    read_only: false
+    
+    # Remove security restrictions for easier development
+    security_opt: []
+    
+    # Override health check for HTTP
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

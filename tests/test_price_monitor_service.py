@@ -71,6 +71,8 @@ class TestMonitoringStats(unittest.TestCase):
             failed_checks=2,
             price_drops_detected=3,
             new_lowest_prices=1,
+            notifications_sent=2,
+            notification_failures=0,
             start_time=start_time
         )
         
@@ -393,6 +395,64 @@ class TestPriceMonitorService(unittest.TestCase):
         self.service.stop_scheduler()
         self.assertFalse(self.service.is_scheduler_running())
     
+    @patch('src.services.price_monitor_service.schedule')
+    def test_start_scheduler_with_frequency_hourly(self, mock_schedule):
+        """Test starting scheduler with hourly frequency."""
+        mock_schedule.every.return_value.hours.do = Mock()
+        
+        # Start scheduler with 6-hour frequency
+        self.service.start_scheduler_with_frequency(6)
+        
+        # Verify scheduler was configured correctly
+        mock_schedule.clear.assert_called_once()
+        mock_schedule.every.assert_called_once_with(6)
+        mock_schedule.every.return_value.hours.do.assert_called_once()
+        self.assertTrue(self.service.is_scheduler_running())
+        
+        # Stop scheduler
+        self.service.stop_scheduler()
+    
+    @patch('src.services.price_monitor_service.schedule')
+    def test_start_scheduler_with_frequency_daily(self, mock_schedule):
+        """Test starting scheduler with daily frequency (24+ hours)."""
+        mock_schedule.every.return_value.day.do = Mock()
+        
+        # Start scheduler with 24-hour frequency
+        self.service.start_scheduler_with_frequency(24)
+        
+        # Verify scheduler was configured for daily
+        mock_schedule.clear.assert_called_once()
+        mock_schedule.every.return_value.day.do.assert_called_once()
+        self.assertTrue(self.service.is_scheduler_running())
+        
+        # Stop scheduler
+        self.service.stop_scheduler()
+    
+    @patch('src.services.price_monitor_service.schedule')
+    def test_start_scheduler_with_frequency_minutes(self, mock_schedule):
+        """Test starting scheduler with sub-hourly frequency."""
+        mock_schedule.every.return_value.minutes.do = Mock()
+        
+        # Start scheduler with 0.5-hour (30 minute) frequency
+        self.service.start_scheduler_with_frequency(0.5)
+        
+        # Verify scheduler was configured for 30 minutes
+        mock_schedule.clear.assert_called_once()
+        mock_schedule.every.assert_called_once_with(30)
+        mock_schedule.every.return_value.minutes.do.assert_called_once()
+        self.assertTrue(self.service.is_scheduler_running())
+        
+        # Stop scheduler
+        self.service.stop_scheduler()
+    
+    def test_start_scheduler_with_frequency_invalid(self):
+        """Test starting scheduler with invalid frequency."""
+        with self.assertRaises(ValueError):
+            self.service.start_scheduler_with_frequency(0)
+        
+        with self.assertRaises(ValueError):
+            self.service.start_scheduler_with_frequency(-1)
+    
     def test_run_immediate_check_all_products(self):
         """Test running immediate check for all products."""
         with patch.object(self.service, 'check_all_products') as mock_check_all:
@@ -436,6 +496,8 @@ class TestPriceMonitorService(unittest.TestCase):
             failed_checks=1,
             price_drops_detected=2,
             new_lowest_prices=1,
+            notifications_sent=1,
+            notification_failures=0,
             start_time=datetime.now()
         )
         self.service._last_run_stats.complete()

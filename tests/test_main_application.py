@@ -13,11 +13,11 @@ from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from main import PriceMonitorApplication, main
-from models.config import Config
-from services.config_service import ConfigService
+from src.main import PriceMonitorApplication, main
+from src.models.config import Config
+from src.services.config_service import ConfigService
 
 
 class TestPriceMonitorApplication:
@@ -77,13 +77,13 @@ log_level = INFO
         # Should return the first option from possible paths
         assert default_path == "config/default.properties"
     
-    @patch('main.logging')
+    @patch('src.main.logging')
     def test_setup_logging(self, mock_logging):
         """Test logging setup."""
         app = PriceMonitorApplication(config_path=self.config_path)
         
         with patch('pathlib.Path.mkdir'):
-            app._setup_logging()
+            app._setup_basic_logging()
         
         # Verify logging was configured
         mock_logging.basicConfig.assert_called_once()
@@ -92,7 +92,7 @@ log_level = INFO
     def test_load_configuration_success(self):
         """Test successful configuration loading."""
         app = PriceMonitorApplication(config_path=self.config_path)
-        app._setup_logging()
+        app._setup_basic_logging()
         
         result = app._load_configuration()
         
@@ -101,23 +101,27 @@ log_level = INFO
         assert app.config is not None
         assert app.config.smtp_server == "smtp.test.com"
     
-    def test_load_configuration_missing_file(self):
+    @patch('src.main.ConfigService')
+    def test_load_configuration_missing_file(self, mock_config_service_class):
         """Test configuration loading with missing file."""
         missing_config_path = os.path.join(self.temp_dir, "missing_config.properties")
         app = PriceMonitorApplication(config_path=missing_config_path)
-        app._setup_logging()
+        app._setup_basic_logging()
         
-        with patch.object(app.config_service, 'create_default_config_file') as mock_create:
-            result = app._load_configuration()
+        # Mock the ConfigService instance
+        mock_config_service = Mock()
+        mock_config_service_class.return_value = mock_config_service
+        
+        result = app._load_configuration()
         
         assert result is False
-        mock_create.assert_called_once()
+        mock_config_service.create_default_config_file.assert_called_once_with(missing_config_path)
     
-    @patch('main.DatabaseManager')
+    @patch('src.main.DatabaseManager')
     def test_initialize_database_success(self, mock_db_manager):
         """Test successful database initialization."""
         app = PriceMonitorApplication(config_path=self.config_path)
-        app._setup_logging()
+        app._setup_basic_logging()
         app._load_configuration()
         
         mock_db_instance = Mock()
@@ -127,13 +131,13 @@ log_level = INFO
         
         assert result is True
         assert app.db_manager == mock_db_instance
-        mock_db_instance.initialize_database.assert_called_once()
+        mock_db_instance.init_database.assert_called_once()
     
-    @patch('main.DatabaseManager')
+    @patch('src.main.DatabaseManager')
     def test_initialize_database_failure(self, mock_db_manager):
         """Test database initialization failure."""
         app = PriceMonitorApplication(config_path=self.config_path)
-        app._setup_logging()
+        app._setup_basic_logging()
         app._load_configuration()
         
         mock_db_manager.side_effect = Exception("Database error")
@@ -143,16 +147,16 @@ log_level = INFO
         assert result is False
         assert app.db_manager is None
     
-    @patch('main.EmailService')
-    @patch('main.PriceMonitorService')
-    @patch('main.ParserService')
-    @patch('main.WebScrapingService')
-    @patch('main.ProductService')
+    @patch('src.main.EmailService')
+    @patch('src.main.PriceMonitorService')
+    @patch('src.main.ParserService')
+    @patch('src.main.WebScrapingService')
+    @patch('src.main.ProductService')
     def test_initialize_services_success(self, mock_product_service, mock_web_scraping,
                                        mock_parser, mock_price_monitor, mock_email):
         """Test successful services initialization."""
         app = PriceMonitorApplication(config_path=self.config_path)
-        app._setup_logging()
+        app._setup_basic_logging()
         app._load_configuration()
         app.db_manager = Mock()
         
@@ -170,16 +174,16 @@ log_level = INFO
         assert app.email_service is not None
         assert app.price_monitor_service is not None
     
-    @patch('main.EmailService')
-    @patch('main.PriceMonitorService')
-    @patch('main.ParserService')
-    @patch('main.WebScrapingService')
-    @patch('main.ProductService')
+    @patch('src.main.EmailService')
+    @patch('src.main.PriceMonitorService')
+    @patch('src.main.ParserService')
+    @patch('src.main.WebScrapingService')
+    @patch('src.main.ProductService')
     def test_initialize_services_email_failure(self, mock_product_service, mock_web_scraping,
                                              mock_parser, mock_price_monitor, mock_email):
         """Test services initialization with email service failure."""
         app = PriceMonitorApplication(config_path=self.config_path)
-        app._setup_logging()
+        app._setup_basic_logging()
         app._load_configuration()
         app.db_manager = Mock()
         
@@ -192,11 +196,11 @@ log_level = INFO
         assert app.email_service is None
         assert app.price_monitor_service is not None
     
-    @patch('main.SecureFlaskApp')
+    @patch('src.main.SecureFlaskApp')
     def test_initialize_flask_app_success(self, mock_flask_app):
         """Test successful Flask app initialization."""
         app = PriceMonitorApplication(config_path=self.config_path)
-        app._setup_logging()
+        app._setup_basic_logging()
         app._load_configuration()
         
         mock_flask_instance = Mock()
@@ -210,8 +214,11 @@ log_level = INFO
     def test_start_monitoring_scheduler_success(self):
         """Test successful monitoring scheduler start."""
         app = PriceMonitorApplication(config_path=self.config_path)
-        app._setup_logging()
+        app._setup_basic_logging()
         app.price_monitor_service = Mock()
+        app.config = Mock()
+        app.config.check_frequency_hours = 24
+        app.config.check_time = "09:00"
         
         result = app._start_monitoring_scheduler()
         
@@ -219,10 +226,38 @@ log_level = INFO
         app.price_monitor_service.start_scheduler.assert_called_once_with("09:00")
         assert app.price_monitor_service.stop_scheduler in app._shutdown_handlers
     
+    def test_start_monitoring_scheduler_with_custom_frequency(self):
+        """Test monitoring scheduler start with custom frequency."""
+        app = PriceMonitorApplication(config_path=self.config_path)
+        app._setup_basic_logging()
+        app.price_monitor_service = Mock()
+        app.config = Mock()
+        app.config.check_frequency_hours = 6
+        app.config.check_time = "10:30"
+        
+        result = app._start_monitoring_scheduler()
+        
+        assert result is True
+        app.price_monitor_service.start_scheduler_with_frequency.assert_called_once_with(6)
+        assert app.price_monitor_service.stop_scheduler in app._shutdown_handlers
+    
+    def test_start_monitoring_scheduler_invalid_frequency(self):
+        """Test monitoring scheduler start with invalid frequency."""
+        app = PriceMonitorApplication(config_path=self.config_path)
+        app._setup_basic_logging()
+        app.price_monitor_service = Mock()
+        app.config = Mock()
+        app.config.check_frequency_hours = 0
+        app.config.check_time = "09:00"
+        
+        result = app._start_monitoring_scheduler()
+        
+        assert result is False
+    
     def test_start_monitoring_scheduler_failure(self):
         """Test monitoring scheduler start failure."""
         app = PriceMonitorApplication(config_path=self.config_path)
-        app._setup_logging()
+        app._setup_basic_logging()
         app.price_monitor_service = Mock()
         app.price_monitor_service.start_scheduler.side_effect = Exception("Scheduler error")
         
@@ -230,19 +265,24 @@ log_level = INFO
         
         assert result is False
     
-    @patch('main.PriceMonitorApplication._start_monitoring_scheduler')
-    @patch('main.PriceMonitorApplication._initialize_flask_app')
-    @patch('main.PriceMonitorApplication._initialize_services')
-    @patch('main.PriceMonitorApplication._initialize_database')
-    @patch('main.PriceMonitorApplication._load_configuration')
-    @patch('main.PriceMonitorApplication._setup_logging')
-    def test_full_initialization_success(self, mock_logging, mock_config, mock_db,
+    @patch('src.main.PriceMonitorApplication._start_monitoring_scheduler')
+    @patch('src.main.PriceMonitorApplication._initialize_flask_app')
+    @patch('src.main.PriceMonitorApplication._initialize_services')
+    @patch('src.main.PriceMonitorApplication._initialize_database')
+    @patch('src.main.PriceMonitorApplication._initialize_logging_service')
+    @patch('src.main.PriceMonitorApplication._load_configuration')
+    @patch('src.main.PriceMonitorApplication._setup_basic_logging')
+    def test_full_initialization_success(self, mock_logging, mock_config, mock_logging_service, mock_db,
                                        mock_services, mock_flask, mock_scheduler):
         """Test full application initialization success."""
         app = PriceMonitorApplication(config_path=self.config_path)
         
+        # Mock logger to avoid NoneType error
+        app.logger = Mock()
+        
         # Mock all initialization steps to succeed
         mock_config.return_value = True
+        mock_logging_service.return_value = True
         mock_db.return_value = True
         mock_services.return_value = True
         mock_flask.return_value = True
@@ -261,8 +301,8 @@ log_level = INFO
         mock_flask.assert_called_once()
         mock_scheduler.assert_called_once()
     
-    @patch('main.PriceMonitorApplication._load_configuration')
-    @patch('main.PriceMonitorApplication._setup_logging')
+    @patch('src.main.PriceMonitorApplication._load_configuration')
+    @patch('src.main.PriceMonitorApplication._setup_basic_logging')
     def test_initialization_failure(self, mock_logging, mock_config):
         """Test application initialization failure."""
         app = PriceMonitorApplication(config_path=self.config_path)
@@ -287,7 +327,7 @@ log_level = INFO
     def test_shutdown_with_handlers(self):
         """Test shutdown with registered handlers."""
         app = PriceMonitorApplication(config_path=self.config_path)
-        app._setup_logging()
+        app._setup_basic_logging()
         app._is_running = True
         
         # Add mock shutdown handlers
@@ -309,7 +349,7 @@ log_level = INFO
     def test_shutdown_with_handler_error(self):
         """Test shutdown with handler that raises an error."""
         app = PriceMonitorApplication(config_path=self.config_path)
-        app._setup_logging()
+        app._setup_basic_logging()
         app._is_running = True
         
         # Add mock shutdown handler that raises an error
@@ -334,7 +374,7 @@ log_level = INFO
     def test_reload_configuration(self):
         """Test configuration reload."""
         app = PriceMonitorApplication(config_path=self.config_path)
-        app._setup_logging()
+        app._setup_basic_logging()
         app._load_configuration()
         app.price_monitor_service = Mock()
         
@@ -356,7 +396,7 @@ log_level = INFO
     def test_get_status(self):
         """Test status information retrieval."""
         app = PriceMonitorApplication(config_path=self.config_path)
-        app._setup_logging()
+        app._setup_basic_logging()
         app._load_configuration()
         app._is_running = True
         
@@ -382,18 +422,18 @@ log_level = INFO
     def test_run_not_initialized(self):
         """Test running application that's not initialized."""
         app = PriceMonitorApplication(config_path=self.config_path)
-        app._setup_logging()
+        app._setup_basic_logging()
         
         # Should log error and return without running
         app.run()
         
         # No exception should be raised
     
-    @patch('main.PriceMonitorApplication.shutdown')
+    @patch('src.main.PriceMonitorApplication.shutdown')
     def test_run_with_flask_app(self, mock_shutdown):
         """Test running application with Flask app."""
         app = PriceMonitorApplication(config_path=self.config_path)
-        app._setup_logging()
+        app._setup_basic_logging()
         app._load_configuration()
         app._is_running = True
         
@@ -453,7 +493,7 @@ log_level = INFO
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
     @patch('sys.argv', ['main.py', '--config', 'test_config.properties', '--check-config'])
-    @patch('main.PriceMonitorApplication')
+    @patch('src.main.PriceMonitorApplication')
     def test_main_check_config(self, mock_app_class):
         """Test main function with --check-config flag."""
         mock_app = Mock()
@@ -474,7 +514,7 @@ log_level = INFO
         mock_app.get_status.assert_called_once()
     
     @patch('sys.argv', ['main.py', '--config', 'test_config.properties', '--test-email'])
-    @patch('main.PriceMonitorApplication')
+    @patch('src.main.PriceMonitorApplication')
     def test_main_test_email_success(self, mock_app_class):
         """Test main function with --test-email flag (success)."""
         mock_app = Mock()
@@ -491,7 +531,7 @@ log_level = INFO
         mock_email_service.send_test_notification.assert_called_once()
     
     @patch('sys.argv', ['main.py', '--config', 'test_config.properties', '--test-email'])
-    @patch('main.PriceMonitorApplication')
+    @patch('src.main.PriceMonitorApplication')
     def test_main_test_email_failure(self, mock_app_class):
         """Test main function with --test-email flag (failure)."""
         mock_app = Mock()
@@ -510,7 +550,7 @@ log_level = INFO
         assert exc_info.value.code == 1
     
     @patch('sys.argv', ['main.py', '--config', 'test_config.properties', '--test-email'])
-    @patch('main.PriceMonitorApplication')
+    @patch('src.main.PriceMonitorApplication')
     def test_main_test_email_no_service(self, mock_app_class):
         """Test main function with --test-email flag when email service unavailable."""
         mock_app = Mock()
@@ -524,7 +564,7 @@ log_level = INFO
         assert exc_info.value.code == 1
     
     @patch('sys.argv', ['main.py', '--config', 'test_config.properties'])
-    @patch('main.PriceMonitorApplication')
+    @patch('src.main.PriceMonitorApplication')
     def test_main_initialization_failure(self, mock_app_class):
         """Test main function with initialization failure."""
         mock_app = Mock()
@@ -537,7 +577,7 @@ log_level = INFO
         assert exc_info.value.code == 1
     
     @patch('sys.argv', ['main.py', '--host', '127.0.0.1', '--port', '8080', '--debug'])
-    @patch('main.PriceMonitorApplication')
+    @patch('src.main.PriceMonitorApplication')
     def test_main_run_with_args(self, mock_app_class):
         """Test main function with custom host, port, and debug."""
         mock_app = Mock()
@@ -550,7 +590,7 @@ log_level = INFO
         mock_app.run.assert_called_once_with(host='127.0.0.1', port=8080, debug=True)
     
     @patch('sys.argv', ['main.py'])
-    @patch('main.PriceMonitorApplication')
+    @patch('src.main.PriceMonitorApplication')
     def test_main_keyboard_interrupt(self, mock_app_class):
         """Test main function handling keyboard interrupt."""
         mock_app = Mock()
@@ -564,7 +604,7 @@ log_level = INFO
         mock_app.run.assert_called_once()
     
     @patch('sys.argv', ['main.py'])
-    @patch('main.PriceMonitorApplication')
+    @patch('src.main.PriceMonitorApplication')
     def test_main_application_error(self, mock_app_class):
         """Test main function handling application error."""
         mock_app = Mock()
