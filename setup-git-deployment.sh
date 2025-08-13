@@ -48,6 +48,9 @@ print_header "Price Monitor Git Deployment Setup"
 # Navigate to application directory
 cd "$APP_DIR"
 
+# Fix git ownership issues when running as root
+git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
+
 # Check if git is installed
 if ! command -v git &> /dev/null; then
     print_status "Installing git..."
@@ -147,9 +150,16 @@ fi
 print_status "Checking out $MAIN_BRANCH branch..."
 git checkout -B "$MAIN_BRANCH" "origin/$MAIN_BRANCH" 2>/dev/null || git checkout -b "$MAIN_BRANCH"
 
+# Ensure price-monitor user exists
+if ! id "price-monitor" &>/dev/null; then
+    print_status "Creating price-monitor user..."
+    useradd -r -s /bin/false -d "$APP_DIR" price-monitor
+    print_success "price-monitor user created"
+fi
+
 # Set proper permissions
 print_status "Setting proper file permissions..."
-chown -R www-data:www-data "$APP_DIR"
+chown -R price-monitor:price-monitor "$APP_DIR"
 chmod -R 755 "$APP_DIR"
 chmod -R 750 "$APP_DIR/data" "$APP_DIR/logs" "$APP_DIR/certs" 2>/dev/null || true
 
