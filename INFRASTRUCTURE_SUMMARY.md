@@ -73,6 +73,17 @@ vim terraform/terraform.tfvars
 terraform output deployment_instructions
 ```
 
+### 4. Cloudflare: Remove proxy and set Encryption mode to Full
+
+**Note**: Used this option to fix redirect loop
+
+1. **Disable Cloudflare Proxy**
+   - Just remove the "Proxy" setting from your domain in Cloudflare
+
+2. **Set SSL Mode to Full**
+   - Go to SSL/TLS → Overview
+   - Set SSL mode to "Full" or "Full (strict)"
+
 ## 🔧 Configuration Options
 
 ### Environment Types
@@ -83,6 +94,7 @@ environment = "dev"
 instance_type = "t3.micro"
 asg_desired_capacity = 1
 use_rds = false  # Uses local SQLite
+domain_name = ""  # No custom domain
 ```
 
 #### Staging
@@ -91,9 +103,10 @@ environment = "staging"
 instance_type = "t3.small"
 asg_desired_capacity = 2
 use_rds = true
+domain_name = "staging-monitor.flowvian.com"
 ```
 
-#### Production
+#### Production (Current: price-monitor.flowvian.com)
 ```hcl
 environment = "production"
 instance_type = "t3.medium"
@@ -101,6 +114,8 @@ asg_desired_capacity = 2
 use_rds = true
 db_backup_retention_period = 30
 enable_deletion_protection = true
+domain_name = "price-monitor.flowvian.com"
+enable_mtls = true
 ```
 
 ### SSL/TLS Options
@@ -111,16 +126,27 @@ domain_name = ""
 enable_mtls = false
 ```
 
-#### HTTPS with Custom Domain
+#### HTTPS with Let's Encrypt (Production)
 ```hcl
-domain_name = "monitor.yourdomain.com"
+domain_name = "price-monitor.flowvian.com"
 enable_mtls = false
+ssl_certificate_source = "letsencrypt"
 ```
 
-#### mTLS with Self-Signed Certificates
+#### Hybrid: Let's Encrypt + mTLS (Current Production)
+```hcl
+domain_name = "price-monitor.flowvian.com"
+enable_mtls = true
+ssl_certificate_source = "letsencrypt"
+mtls_proxy_enabled = true
+app_port = 8443
+```
+
+#### mTLS with Self-Signed Certificates (Development)
 ```hcl
 domain_name = ""
 enable_mtls = true
+ssl_certificate_source = "self-signed"
 ```
 
 ## 🔐 Security Features

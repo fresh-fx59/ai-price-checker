@@ -262,16 +262,27 @@ class ProductService:
             with self.db_manager.get_session() as session:
                 product = session.query(Product).filter(Product.id == product_id).first()
                 if not product:
-                    print(f"Product with ID {product_id} not found")
+                    print(f"Product with ID {product_id} not found in database")
                     return False
+                
+                print(f"Deleting product: {product.name} (ID: {product_id})")
                 
                 # Delete product (price history will be deleted due to cascade)
                 session.delete(product)
                 session.commit()
+                
+                print(f"Successfully deleted product {product_id} from database")
                 return True
                 
         except SQLAlchemyError as e:
-            print(f"Database error deleting product: {e}")
+            print(f"Database error deleting product {product_id}: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+        except Exception as e:
+            print(f"Unexpected error deleting product {product_id}: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def deactivate_product(self, product_id: int) -> bool:

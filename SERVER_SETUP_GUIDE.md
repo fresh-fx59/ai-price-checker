@@ -16,10 +16,16 @@ sudo ./setup-ubuntu-server.sh
 
 ### Custom Configuration
 ```bash
-# Setup with custom domain and SSL
-sudo DOMAIN_NAME=monitor.example.com \
-     EMAIL_ADDRESS=admin@example.com \
+# Setup with custom domain and SSL (production)
+sudo DOMAIN_NAME=price-monitor.flowvian.com \
+     EMAIL_ADDRESS=admin@flowvian.com \
      SETUP_SSL=true \
+     ./setup-ubuntu-server.sh
+
+# Setup with mTLS proxy configuration
+sudo DOMAIN_NAME=price-monitor.flowvian.com \
+     SETUP_SSL=true \
+     ENABLE_MTLS=true \
      ./setup-ubuntu-server.sh
 
 # Setup without Docker (for lightweight deployment)
@@ -86,11 +92,12 @@ sudo APP_PORT=3000 \
      ./setup-ubuntu-server.sh
 ```
 
-#### Production Server with SSL
+#### Production Server with SSL (Current Configuration)
 ```bash
-sudo DOMAIN_NAME=monitor.yourdomain.com \
-     EMAIL_ADDRESS=admin@yourdomain.com \
+sudo DOMAIN_NAME=price-monitor.flowvian.com \
+     EMAIL_ADDRESS=admin@flowvian.com \
      SETUP_SSL=true \
+     ENABLE_MTLS=true \
      ./setup-ubuntu-server.sh
 ```
 
@@ -233,11 +240,42 @@ sudo systemctl restart price-monitor
 sudo journalctl -u price-monitor -f
 tail -f /opt/price-monitor/logs/price_monitor.log
 
-# Check application status
+# Check application status (local)
 curl http://localhost:8080/health
+
+# Check application status (production with mTLS)
+curl --cert /opt/price-monitor/certs/admin-client.crt \
+     --key /opt/price-monitor/certs/admin-client.key \
+     https://price-monitor.flowvian.com/health
 
 # Update application
 sudo -u price-monitor /opt/price-monitor/deploy-app.sh
+
+# Nginx management
+sudo systemctl status nginx
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### mTLS Configuration (Production)
+
+For the production setup with price-monitor.flowvian.com:
+
+```bash
+# Generate client certificates
+sudo -u price-monitor /opt/price-monitor/generate-client-certs.sh admin-client 365
+sudo -u price-monitor /opt/price-monitor/generate-client-certs.sh nginx-client 365
+
+# Configure nginx with mTLS proxy
+sudo /opt/price-monitor/setup-nginx-mtls.sh price-monitor.flowvian.com
+
+# Test mTLS configuration
+curl --cert /opt/price-monitor/certs/admin-client.crt \
+     --key /opt/price-monitor/certs/admin-client.key \
+     https://price-monitor.flowvian.com/health
+
+# Import certificates on macOS clients
+sudo /opt/price-monitor/import-certs-macos.sh
 ```
 
 ## 🔧 Troubleshooting

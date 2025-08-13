@@ -67,6 +67,8 @@ class PriceMonitorApp {
     
     async makeRequest(url, options = {}) {
         try {
+            console.log('Making request to:', url, 'with options:', options);
+            
             // Configure request for mTLS if needed
             const requestOptions = {
                 ...options,
@@ -78,13 +80,17 @@ class PriceMonitorApp {
             };
             
             const response = await fetch(url, requestOptions);
+            console.log('Response status:', response.status, response.statusText);
             
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
+                console.error('Error response data:', errorData);
                 throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
             }
             
-            return await response.json();
+            const data = await response.json();
+            console.log('Response data:', data);
+            return data;
         } catch (error) {
             console.error('Request failed:', error);
             
@@ -452,7 +458,8 @@ class PriceMonitorApp {
             deleteButton.disabled = true;
             deleteButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Deleting...';
             
-            await this.makeRequest(`${this.apiBaseUrl}/products/${this.currentProduct.id}`, {
+            // Make DELETE request with confirm=true parameter
+            await this.makeRequest(`${this.apiBaseUrl}/products/${this.currentProduct.id}?confirm=true`, {
                 method: 'DELETE'
             });
             

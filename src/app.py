@@ -361,12 +361,16 @@ class SecureFlaskApp:
         def delete_product(product_id):
             """Delete a monitored product."""
             try:
+                self.logger.info(f"DELETE request for product {product_id}, args: {request.args}")
+                
                 # Check for confirmation parameter
                 confirm = request.args.get('confirm', 'false').lower() == 'true'
+                self.logger.info(f"Confirmation parameter: {confirm}")
                 
                 # Check if product exists
                 product = self.product_service.get_product(product_id)
                 if not product:
+                    self.logger.warning(f"Product {product_id} not found")
                     return jsonify({
                         'error': 'Product not found',
                         'message': f'Product with ID {product_id} does not exist'
@@ -374,6 +378,7 @@ class SecureFlaskApp:
                 
                 # If no confirmation, return product info for confirmation dialog
                 if not confirm:
+                    self.logger.info(f"No confirmation, returning product info for {product_id}")
                     return jsonify({
                         'requires_confirmation': True,
                         'product': {
@@ -387,8 +392,11 @@ class SecureFlaskApp:
                     }), 200
                 
                 # Delete the product
+                self.logger.info(f"Attempting to delete product {product_id}: {product.name}")
                 success = self.product_service.delete_product(product_id)
+                
                 if not success:
+                    self.logger.error(f"Failed to delete product {product_id} from database")
                     return jsonify({
                         'error': 'Failed to delete product',
                         'message': 'Could not delete product from database'
@@ -404,10 +412,10 @@ class SecureFlaskApp:
                 })
                 
             except Exception as e:
-                self.logger.error(f"Error deleting product {product_id}: {str(e)}")
+                self.logger.error(f"Error deleting product {product_id}: {str(e)}", exc_info=True)
                 return jsonify({
                     'error': 'Internal server error',
-                    'message': 'Failed to delete product'
+                    'message': f'Failed to delete product: {str(e)}'
                 }), 500
         
         @self.app.route('/api/products/<int:product_id>/price', methods=['PUT'])
@@ -679,11 +687,11 @@ class SecureFlaskApp:
             # Content security policy
             response.headers['Content-Security-Policy'] = (
                 "default-src 'self'; "
-                "script-src 'self'; "
-                "style-src 'self' 'unsafe-inline'; "
-                "img-src 'self' data:; "
+                "script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+                "img-src 'self' data: https: http:; "
                 "connect-src 'self'; "
-                "font-src 'self'; "
+                "font-src 'self' https://cdnjs.cloudflare.com; "
                 "object-src 'none'; "
                 "media-src 'self'; "
                 "frame-src 'none';"
