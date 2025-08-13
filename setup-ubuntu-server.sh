@@ -495,6 +495,19 @@ install_nginx() {
     # Backup existing nginx configuration
     backup_nginx_config
     
+    # Create enhanced log format for IPv6 support
+    cat >> /etc/nginx/nginx.conf << 'EOF'
+
+# Enhanced log format for IPv4/IPv6 dual-stack
+log_format dual_stack '$remote_addr - $remote_user [$time_local] '
+                      '"$request" $status $body_bytes_sent '
+                      '"$http_referer" "$http_user_agent" '
+                      'rt=$request_time uct="$upstream_connect_time" '
+                      'uht="$upstream_header_time" urt="$upstream_response_time" '
+                      'client_ip="$http_x_forwarded_for" '
+                      'protocol="$server_protocol" scheme="$scheme"';
+EOF
+    
     # Create basic configuration
     cat > /etc/nginx/sites-available/price-monitor << 'EOF'
 server {
@@ -509,6 +522,10 @@ server {
     add_header Referrer-Policy "no-referrer-when-downgrade" always;
     add_header Content-Security-Policy "default-src 'self' http: https: data: blob: 'unsafe-inline'" always;
     
+    # IPv6 and dual-stack support headers
+    add_header X-Served-By \$hostname always;
+    add_header X-Client-IP \$remote_addr always;
+    
     # Gzip compression
     gzip on;
     gzip_vary on;
@@ -522,13 +539,24 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # IPv6 support headers
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Original-URI $request_uri;
+        
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
+        
+        # Support for both IPv4 and IPv6 clients
+        proxy_bind $server_addr transparent;
     }
     
     location /health {
         proxy_pass http://127.0.0.1:8080/health;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         access_log off;
     }
     
@@ -729,6 +757,46 @@ validate_nginx_config() {
             print_error "✗ Nginx configuration has errors"
             return 1
         fi
+    fi
+}
+
+# Function to test dual-stack connectivity
+test_dual_stack_connectivity() {
+    local domain="${1:-google.com}"
+    
+    print_header "Testing dual-stack connectivity..."
+    
+    # Test IPv4 connectivity
+    if ping -4 -c 1 -W 5 "$domain" > /dev/null 2>&1; then
+        print_success "✓ IPv4 connectivity working"
+        ipv4_working=true
+    else
+        print_warning "✗ IPv4 connectivity failed"
+        ipv4_working=false
+    fi
+    
+    # Test IPv6 connectivity
+    if ping6 -c 1 -W 5 "$domain" > /dev/null 2>&1; then
+        print_success "✓ IPv6 connectivity working"
+        ipv6_working=true
+    else
+        print_warning "✗ IPv6 connectivity failed or not available"
+        ipv6_working=false
+    fi
+    
+    # Summary
+    if [[ "$ipv4_working" == "true" && "$ipv6_working" == "true" ]]; then
+        print_success "Dual-stack connectivity confirmed"
+        return 0
+    elif [[ "$ipv4_working" == "true" ]]; then
+        print_status "IPv4-only connectivity available"
+        return 0
+    elif [[ "$ipv6_working" == "true" ]]; then
+        print_status "IPv6-only connectivity available"
+        return 0
+    else
+        print_error "No network connectivity detected"
+        return 1
     fi
 }
 
@@ -1668,6 +1736,12 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+        
+        # Enhanced IPv6 support headers
+        proxy_set_header X-Forwarded-Host \$host;
+        proxy_set_header X-Original-URI \$request_uri;
+        proxy_set_header X-Client-IP \$remote_addr;
+        
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
         proxy_read_timeout 60s;
@@ -1676,11 +1750,17 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
+        
+        # Support for both IPv4 and IPv6 clients
+        proxy_bind \$server_addr transparent;
     }
     
     # Health check endpoint
     location /health {
         proxy_pass http://127.0.0.1:$APP_PORT/health;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         access_log off;
     }
     
@@ -2162,12 +2242,32 @@ log_message() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
 }
 
-# Check if application is responding
-if curl -f -s http://localhost:$APP_PORT/health > /dev/null; then
-    log_message "Health check PASSED"
+# Check if application is responding on both IPv4 and IPv6
+ipv4_check=false
+ipv6_check=false
+
+# Test IPv4 connectivity
+if curl -4 -f -s http://localhost:$APP_PORT/health > /dev/null 2>&1; then
+    log_message "IPv4 health check PASSED"
+    ipv4_check=true
+else
+    log_message "IPv4 health check FAILED"
+fi
+
+# Test IPv6 connectivity (if available)
+if curl -6 -f -s http://localhost:$APP_PORT/health > /dev/null 2>&1; then
+    log_message "IPv6 health check PASSED"
+    ipv6_check=true
+else
+    log_message "IPv6 health check FAILED or not available"
+fi
+
+# Overall health check result
+if [[ "$ipv4_check" == "true" || "$ipv6_check" == "true" ]]; then
+    log_message "Overall health check PASSED (IPv4: $ipv4_check, IPv6: $ipv6_check)"
     exit 0
 else
-    log_message "Health check FAILED - Application not responding"
+    log_message "Overall health check FAILED - Application not responding on any protocol"
     # Try to restart the service
     systemctl restart price-monitor
     log_message "Attempted to restart price-monitor service"
@@ -2383,7 +2483,7 @@ set -e
 
 APP_DIR="/opt/price-monitor"
 APP_USER="price-monitor"
-REPO_URL="${REPO_URL:-https://github.com/your-username/price-monitor.git}"
+REPO_URL="${REPO_URL:-https://github.com/fresh-fx59/ai-price-checker.git}"
 BRANCH="${BRANCH:-main}"
 
 # Colors for output
@@ -2455,10 +2555,31 @@ sudo systemctl restart price-monitor
 # Wait for application to start
 sleep 5
 
-# Health check
-if curl -f -s http://localhost:8080/health > /dev/null; then
+# Health check for both IPv4 and IPv6
+print_status "Performing dual-stack health check..."
+
+ipv4_healthy=false
+ipv6_healthy=false
+
+# Test IPv4
+if curl -4 -f -s http://localhost:8080/health > /dev/null 2>&1; then
+    print_success "✓ IPv4 health check passed"
+    ipv4_healthy=true
+else
+    print_warning "✗ IPv4 health check failed"
+fi
+
+# Test IPv6
+if curl -6 -f -s http://localhost:8080/health > /dev/null 2>&1; then
+    print_success "✓ IPv6 health check passed"
+    ipv6_healthy=true
+else
+    print_status "IPv6 health check failed or not available"
+fi
+
+if [[ "$ipv4_healthy" == "true" || "$ipv6_healthy" == "true" ]]; then
     print_success "Deployment completed successfully!"
-    print_status "Application is running and healthy"
+    print_status "Application is running and healthy (IPv4: $ipv4_healthy, IPv6: $ipv6_healthy)"
 else
     print_error "Deployment may have failed - health check failed"
     print_status "Check logs: journalctl -u price-monitor -f"
@@ -2564,6 +2685,11 @@ main() {
     
     # Check network connectivity
     print_header "Checking network connectivity..."
+    
+    # Test dual-stack connectivity first
+    test_dual_stack_connectivity
+    
+    # Then test HTTPS connectivity
     if ! check_network_connectivity "https://google.com" 10; then
         handle_offline_mode
         read -p "Continue in offline mode? (y/N): " -n 1 -r
@@ -2646,6 +2772,9 @@ Examples:
     # Setup for IPv6-only domain
     sudo DOMAIN_NAME=price-checker.flowvian.com EMAIL_ADDRESS=admin@flowvian.com SETUP_SSL=true $0
 
+    # Setup for dual-stack domain (IPv4 + IPv6)
+    sudo DOMAIN_NAME=example.com EMAIL_ADDRESS=admin@example.com SETUP_SSL=true $0
+
     # Setup without Docker
     sudo INSTALL_DOCKER=false $0
 
@@ -2654,6 +2783,9 @@ Examples:
     
     # Issue SSL certificate for IPv6-only domain
     sudo issue-ssl-cert price-checker.flowvian.com admin@flowvian.com nginx
+    
+    # Issue SSL certificate for dual-stack domain
+    sudo issue-ssl-cert example.com admin@example.com nginx
 
 EOF
 }

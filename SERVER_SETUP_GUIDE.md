@@ -9,7 +9,7 @@ The `setup-ubuntu-server.sh` script provides a comprehensive, automated setup fo
 ### Basic Setup
 ```bash
 # Download and run the setup script
-wget https://raw.githubusercontent.com/your-repo/price-monitor/main/setup-ubuntu-server.sh
+wget https://raw.githubusercontent.com/fresh-fx59/ai-price-checker/main/setup-ubuntu-server.sh
 chmod +x setup-ubuntu-server.sh
 sudo ./setup-ubuntu-server.sh
 ```
@@ -197,7 +197,7 @@ sudo nano /opt/price-monitor/config/production.properties
 2. **Deploy Application Code**:
 ```bash
 # Set repository URL
-export REPO_URL=https://github.com/your-username/price-monitor.git
+export REPO_URL=https://github.com/fresh-fx59/ai-price-checker.git
 
 # Deploy application
 sudo -u price-monitor /opt/price-monitor/deploy-app.sh
