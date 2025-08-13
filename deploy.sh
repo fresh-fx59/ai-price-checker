@@ -2,6 +2,17 @@
 
 # Price Monitor Deployment Script
 # This script pulls the latest changes and restarts the service
+#
+# Usage:
+#   sudo ./deploy.sh
+#   sudo GIT_REPO_URL=https://github.com/fresh-fx59/ai-price-checker.git ./deploy.sh
+#   sudo APP_DIR=/custom/path SERVICE_NAME=my-service ./deploy.sh
+#
+# Environment Variables:
+#   APP_DIR       - Application directory (default: /opt/price-monitor)
+#   SERVICE_NAME  - Systemd service name (default: price-monitor)
+#   BACKUP_DIR    - Backup directory (default: /opt/price-monitor/backups)
+#   GIT_REPO_URL  - Git repository URL (default: https://github.com/fresh-fx59/ai-price-checker.git)
 
 set -e
 
@@ -33,9 +44,10 @@ print_header() {
 }
 
 # Configuration
-APP_DIR="/opt/price-monitor"
-SERVICE_NAME="price-monitor"
-BACKUP_DIR="/opt/price-monitor/backups"
+APP_DIR="${APP_DIR:-/opt/price-monitor}"
+SERVICE_NAME="${SERVICE_NAME:-price-monitor}"
+BACKUP_DIR="${BACKUP_DIR:-/opt/price-monitor/backups}"
+GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/fresh-fx59/ai-price-checker.git}"  # Can be set as environment variable
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 # Check if running as root
@@ -51,6 +63,36 @@ mkdir -p "$BACKUP_DIR"
 
 # Navigate to application directory
 cd "$APP_DIR"
+
+# Initialize git repository if not already done
+if [[ ! -d ".git" ]]; then
+    print_status "Initializing git repository..."
+    git init
+    
+    # Prompt for git repository URL if not provided
+    if [[ -z "$GIT_REPO_URL" ]]; then
+        echo -n "Enter your git repository URL (e.g., https://github.com/username/repo.git): "
+        read GIT_REPO_URL
+    fi
+    
+    git remote add origin "$GIT_REPO_URL"
+    print_success "Git repository initialized with remote: $GIT_REPO_URL"
+else
+    print_status "Git repository already initialized"
+fi
+
+# Check if remote origin exists
+if ! git remote get-url origin >/dev/null 2>&1; then
+    print_warning "Git remote 'origin' not found"
+    
+    if [[ -z "$GIT_REPO_URL" ]]; then
+        echo -n "Enter your git repository URL (e.g., https://github.com/username/repo.git): "
+        read GIT_REPO_URL
+    fi
+    
+    git remote add origin "$GIT_REPO_URL"
+    print_success "Git remote added: $GIT_REPO_URL"
+fi
 
 # Create backup of current version
 print_status "Creating backup of current version..."
@@ -71,6 +113,14 @@ systemctl stop "$SERVICE_NAME" || print_warning "Service may not be running"
 # Pull latest changes
 print_status "Pulling latest changes from git..."
 git fetch origin
+
+# Check if we're on the main branch, if not create and switch to it
+CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+if [[ "$CURRENT_BRANCH" != "main" ]]; then
+    print_status "Switching to main branch..."
+    git checkout -B main origin/main 2>/dev/null || git checkout -b main
+fi
+
 git reset --hard origin/main
 
 # Set proper permissions
