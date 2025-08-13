@@ -2,7 +2,7 @@
 
 # Price Monitor Application - Ubuntu 24.04 Server Setup Script
 # This script prepares a fresh Ubuntu 24.04 server to run the Price Monitor application
-# Default Python version: 3.13 (latest stable release)
+# Default Python version: 3.12 (stable and compatible)
 #
 # SSL Certificate Features:
 # - Automatic SSL certificate issuance with Let's Encrypt
@@ -37,7 +37,7 @@ NC='\033[0m' # No Color
 APP_USER="${APP_USER:-price-monitor}"
 APP_DIR="${APP_DIR:-/opt/price-monitor}"
 APP_PORT="${APP_PORT:-8080}"
-PYTHON_VERSION="${PYTHON_VERSION:-3.13}"
+PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 NODE_VERSION="${NODE_VERSION:-20}"
 INSTALL_DOCKER="${INSTALL_DOCKER:-true}"
 INSTALL_NGINX="${INSTALL_NGINX:-true}"
@@ -126,7 +126,11 @@ update_system() {
         fail2ban \
         logrotate \
         cron \
-        supervisor
+        supervisor \
+        bc \
+        libxml2-dev \
+        libxslt1-dev \
+        pkg-config
     
     print_success "System updated successfully"
 }
@@ -135,7 +139,7 @@ update_system() {
 install_python() {
     print_header "Installing Python ${PYTHON_VERSION} and dependencies..."
     
-    # Add deadsnakes PPA for latest Python versions (required for Python 3.13)
+    # Add deadsnakes PPA for latest Python versions
     if [[ "$OFFLINE_MODE" != "true" ]]; then
         print_status "Adding deadsnakes PPA for Python ${PYTHON_VERSION}..."
         add-apt-repository ppa:deadsnakes/ppa -y
@@ -145,12 +149,8 @@ install_python() {
         apt-get update -y
     fi
     
-    # For Python 3.13, we might need additional repositories
-    if [[ "$PYTHON_VERSION" == "3.13" ]]; then
-        print_status "Python 3.13 detected - ensuring latest package information..."
-        # Refresh package cache to get the latest Python 3.13 packages
-        apt-get update -y
-    fi
+    # Refresh package cache for Python installation
+    apt-get update -y
     
     # Detect Ubuntu version and adjust Python version if needed
     ubuntu_version=$(lsb_release -rs 2>/dev/null || echo "24.04")
@@ -163,20 +163,20 @@ install_python() {
         # Adjust Python version based on Ubuntu version
         case "$ubuntu_version" in
             "24.04"|"23.10"|"23.04")
-                # Ubuntu 24.04+ - prioritize Python 3.13
-                available_versions="3.13 3.12 3.11 3.10 3.9"
+                # Ubuntu 24.04+ - prioritize Python 3.12
+                available_versions="3.12 3.11 3.10 3.9"
                 ;;
             "22.04"|"22.10")
-                # Ubuntu 22.04 - Python 3.13 available via deadsnakes
-                available_versions="3.13 3.12 3.11 3.10 3.9 3.8"
+                # Ubuntu 22.04 - Python 3.12 recommended
+                available_versions="3.12 3.11 3.10 3.9 3.8"
                 ;;
             "20.04"|"20.10")
-                # Ubuntu 20.04 - Python 3.13 available via deadsnakes
-                available_versions="3.13 3.12 3.11 3.10 3.9 3.8"
+                # Ubuntu 20.04 - Python 3.12 recommended
+                available_versions="3.12 3.11 3.10 3.9 3.8"
                 ;;
             *)
-                # Default fallback - prioritize Python 3.13
-                available_versions="3.13 3.12 3.11 3.10 3.9 3.8"
+                # Default fallback - prioritize Python 3.12
+                available_versions="3.12 3.11 3.10 3.9 3.8"
                 ;;
         esac
         
@@ -2075,7 +2075,7 @@ EOF
 setup_app_environment() {
     print_header "Setting up application environment..."
     
-    # Create Python virtual environment (using Python 3.13 by default)
+    # Create Python virtual environment (using Python 3.12 by default)
     print_status "Creating virtual environment with Python $(python3 --version)..."
     sudo -u $APP_USER python3 -m venv $APP_DIR/venv
     
@@ -2089,7 +2089,7 @@ setup_app_environment() {
         return 1
     fi
     
-    # Create requirements.txt if it doesn't exist (Python 3.13 compatible versions)
+    # Create requirements.txt if it doesn't exist (Python 3.12 compatible versions)
     if [[ ! -f "$APP_DIR/requirements.txt" ]]; then
         cat > $APP_DIR/requirements.txt << 'EOF'
 # Core web framework
@@ -2132,7 +2132,7 @@ certifi>=2023.11.17
 charset-normalizer>=3.3.2
 idna>=3.6
 
-# Additional Python 3.13 compatibility packages
+# Additional Python 3.12 compatibility packages
 setuptools>=69.0.0
 wheel>=0.42.0
 EOF
@@ -2534,9 +2534,107 @@ else
     cd "$APP_DIR"
 fi
 
+# Function to check Python version compatibility
+check_python_version() {
+    python_version=$($APP_DIR/venv/bin/python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+    print_status "Detected Python version: $python_version"
+    
+    # Check if Python 3.13+ (which has lxml compatibility issues)
+    if [[ $(echo "$python_version >= 3.13" | bc -l) -eq 1 ]]; then
+        print_status "Python 3.13+ detected - using compatibility mode for lxml"
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function to install lxml with Python 3.13 compatibility
+install_lxml_compatible() {
+    print_status "Installing lxml with Python 3.13 compatibility..."
+    
+    # Try precompiled wheel first (fastest and most reliable)
+    if $APP_DIR/venv/bin/pip install --only-binary=lxml lxml; then
+        print_success "✓ lxml installed from precompiled wheel"
+        return 0
+    fi
+    
+    # If wheel fails, try older compatible version
+    print_status "Precompiled wheel failed, trying compatible lxml version..."
+    if $APP_DIR/venv/bin/pip install "lxml>=4.9.0,<5.0.0" --only-binary=lxml; then
+        print_success "✓ Compatible lxml version installed"
+        return 0
+    fi
+    
+    # Last resort: try to build with relaxed constraints
+    print_status "Trying to build lxml with relaxed constraints..."
+    export CFLAGS="-Wno-error"
+    if $APP_DIR/venv/bin/pip install lxml --no-binary=lxml; then
+        print_success "✓ lxml built from source with relaxed constraints"
+        unset CFLAGS
+        return 0
+    fi
+    
+    unset CFLAGS
+    print_error "Failed to install lxml - Python 3.13 compatibility issue"
+    return 1
+}
+
 # Install/update dependencies
 print_status "Installing dependencies..."
-$APP_DIR/venv/bin/pip install -r requirements.txt
+
+# Upgrade pip and install build tools
+$APP_DIR/venv/bin/pip install --upgrade pip wheel setuptools
+
+# Check if we need Python 3.13 compatibility mode
+if check_python_version; then
+    # Python 3.13+ detected - handle lxml specially
+    if grep -q "lxml" requirements.txt; then
+        print_status "Handling lxml installation for Python 3.13 compatibility..."
+        
+        # Install lxml with compatibility handling
+        if ! install_lxml_compatible; then
+            print_error "Could not install lxml. Consider using Python 3.11 or 3.12 for better compatibility."
+            exit 1
+        fi
+        
+        # Install remaining dependencies (excluding lxml)
+        print_status "Installing remaining dependencies..."
+        grep -v "^lxml" requirements.txt > /tmp/requirements_no_lxml.txt
+        if [ -s /tmp/requirements_no_lxml.txt ]; then
+            $APP_DIR/venv/bin/pip install -r /tmp/requirements_no_lxml.txt
+        fi
+        rm -f /tmp/requirements_no_lxml.txt
+    else
+        # No lxml in requirements, install normally
+        $APP_DIR/venv/bin/pip install -r requirements.txt
+    fi
+else
+    # Python < 3.13 - use standard installation with PEP 517 for lxml
+    if grep -q "lxml" requirements.txt; then
+        print_status "Installing lxml with PEP 517 support..."
+        
+        # Extract lxml version from requirements.txt
+        lxml_version=$(grep "^lxml" requirements.txt | head -1)
+        
+        # Try PEP 517 first, then fallback
+        if $APP_DIR/venv/bin/pip install --use-pep517 --no-build-isolation "$lxml_version"; then
+            print_status "✓ lxml installed with PEP 517"
+        else
+            print_status "PEP 517 failed, using standard installation..."
+            $APP_DIR/venv/bin/pip install "$lxml_version"
+        fi
+        
+        # Install remaining dependencies
+        grep -v "^lxml" requirements.txt > /tmp/requirements_no_lxml.txt
+        if [ -s /tmp/requirements_no_lxml.txt ]; then
+            $APP_DIR/venv/bin/pip install -r /tmp/requirements_no_lxml.txt
+        fi
+        rm -f /tmp/requirements_no_lxml.txt
+    else
+        # No lxml, install normally
+        $APP_DIR/venv/bin/pip install -r requirements.txt
+    fi
+fi
 
 # Run database migrations if needed
 if [ -f "$APP_DIR/migrations.py" ]; then
@@ -2746,7 +2844,7 @@ Environment Variables:
     APP_USER          Application user name (default: price-monitor)
     APP_DIR           Application directory (default: /opt/price-monitor)
     APP_PORT          Application port (default: 8080)
-    PYTHON_VERSION    Python version to install (default: 3.13)
+    PYTHON_VERSION    Python version to install (default: 3.12)
     NODE_VERSION      Node.js version to install (default: 20)
     INSTALL_DOCKER    Install Docker (default: true)
     INSTALL_NGINX     Install Nginx (default: true)
@@ -2757,7 +2855,7 @@ Environment Variables:
     SSL_METHOD        SSL certificate method: nginx, webroot, standalone, dns (default: nginx)
 
 Examples:
-    # Basic setup (uses Python 3.13 by default)
+    # Basic setup (uses Python 3.12 by default)
     sudo $0
 
     # Setup with custom Python version

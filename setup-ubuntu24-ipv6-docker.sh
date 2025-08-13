@@ -162,7 +162,12 @@ update_system() {
         logrotate \
         cron \
         netcat-openbsd \
-        dnsutils
+        dnsutils \
+        libxml2-dev \
+        libxslt1-dev \
+        python3-dev \
+        build-essential \
+        pkg-config
     
     print_success "System updated successfully"
 }
@@ -507,6 +512,11 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
+    libxml2-dev \
+    libxslt1-dev \
+    python3-dev \
+    build-essential \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
